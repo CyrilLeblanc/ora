@@ -59,6 +59,7 @@ class OraApp(Gtk.Window):
         self._tts.on_done             = self._on_tts_done
         self._tts.on_status           = self._set_status
         self._tts.on_error            = self._show_error
+        self._tts.on_chunk_highlight  = self._on_chunk_highlight
 
         # ── Build and show UI ─────────────────────────────────────────────────
         self._build_ui()
@@ -140,6 +141,9 @@ class OraApp(Gtk.Window):
         self.textview.set_top_margin(12)
         self.textview.set_bottom_margin(12)
         self.textview.get_buffer().connect("changed", lambda _: self._autosave_text())
+        self._highlight_tag = self.textview.get_buffer().create_tag(
+            "chunk-highlight", background="#1e3a5f"
+        )
 
         scroll.add(self.textview)
         return scroll
@@ -349,6 +353,15 @@ class OraApp(Gtk.Window):
         self.chunk_progress.set_text("")
         self._set_status(_("ready"))
 
+    def _on_chunk_highlight(self, start: int, end: int) -> None:
+        buf = self.textview.get_buffer()
+        buf.remove_tag(self._highlight_tag, buf.get_start_iter(), buf.get_end_iter())
+        if start >= 0:
+            it_start = buf.get_iter_at_offset(start)
+            it_end = buf.get_iter_at_offset(end)
+            buf.apply_tag(self._highlight_tag, it_start, it_end)
+            self.textview.scroll_to_iter(it_start, 0.1, False, 0.0, 0.0)
+
     # =========================================================================
     # Button callbacks
     # =========================================================================
@@ -378,6 +391,7 @@ class OraApp(Gtk.Window):
 
     def _on_stop(self, _btn: Gtk.Button) -> None:
         self._tts.stop()
+        self._on_chunk_highlight(-1, -1)
         self.chunk_progress.set_fraction(0.0)
         self.chunk_progress.set_text("")
         self._set_status(_("stopped"))

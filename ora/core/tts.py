@@ -48,6 +48,7 @@ class TTSEngine:
         self._speaking = False
         self._paused = False
         self._chunks: list[str] = []
+        self._chunk_spans: list[tuple[int, int]] = []
 
         # ── Callbacks wired by the app ────────────────────────────────────────
         self.on_status: Optional[Callable[[str], None]] = None
@@ -55,6 +56,7 @@ class TTSEngine:
         self.on_done: Optional[Callable[[], None]] = None
         self.on_error: Optional[Callable[[str], None]] = None
         self.on_speaking_changed: Optional[Callable[[bool], None]] = None
+        self.on_chunk_highlight: Optional[Callable[[int, int], None]] = None
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -73,9 +75,11 @@ class TTSEngine:
         """
         self.stop()
 
-        self._chunks = split_chunks(text)
-        if not self._chunks:
+        chunks_with_spans = split_chunks_with_offsets(text)
+        if not chunks_with_spans:
             return
+        self._chunks = [c for c, _, _ in chunks_with_spans]
+        self._chunk_spans = [(s, e) for _, s, e in chunks_with_spans]
 
         self._stop_event.clear()
         self._paused = False
@@ -88,7 +92,7 @@ class TTSEngine:
 
         threading.Thread(
             target=self._producer,
-            args=(list(self._chunks), model_path, speed, total, q),
+            args=(list(self._chunks), list(self._chunk_spans), model_path, speed, total, q),
             daemon=True,
             name="tts-producer",
         ).start()
@@ -145,8 +149,8 @@ class TTSEngine:
     # ── Producer thread ───────────────────────────────────────────────────────
 
     def _producer(
-        self, chunks: list[str], model_path: Path, speed: float, total: int,
-        q: queue.Queue,
+        self, chunks: list[str], chunk_spans: list[tuple[int, int]],
+        model_path: Path, speed: float, total: int, q: queue.Queue,
     ) -> None:
         piper = _get_piper_bin()
         if not piper:
@@ -154,7 +158,7 @@ class TTSEngine:
             q.put(None)
             return
 
-        for chunk in chunks:
+        for chunk, (start, end) in zip(chunks, chunk_spans):
             if self._stop_event.is_set():
                 break
 
@@ -169,7 +173,7 @@ class TTSEngine:
 
             if pcm_path and not self._stop_event.is_set():
                 # Block if the consumer is slow (bounded queue provides back-pressure)
-                q.put(pcm_path)
+                q.put((pcm_path, start, end))
 
         q.put(None)  # sentinel: producer is done
 
@@ -193,7 +197,10 @@ class TTSEngine:
             if self._stop_event.is_set():
                 break
 
-            pcm_path: Path = item
+            pcm_path, start, end = item
+            if self.on_chunk_highlight:
+                from gi.repository import GLib
+                GLib.idle_add(self.on_chunk_highlight, start, end)
             self._play_pcm(pcm_path)
             chunk_end = time.monotonic()
             done += 1
@@ -202,7 +209,11 @@ class TTSEngine:
                 from gi.repository import GLib
                 GLib.idle_add(self.on_chunk_progress, done, total)
 
-        # Mark as no longer speaking once consumer finishes
+        # Clear the highlight and mark as no longer speaking once consumer finishes
+        if self.on_chunk_highlight:
+            from gi.repository import GLib
+            GLib.idle_add(self.on_chunk_highlight, -1, -1)
+
         self._speaking = False
         self._notify_speaking(False)
 
@@ -323,6 +334,65 @@ def split_chunks(text: str, min_len: int = CHUNK_MIN_LEN) -> list[str]:
             chunks.append(buffer)
 
     return chunks
+
+
+def split_chunks_with_offsets(
+    text: str, min_len: int = CHUNK_MIN_LEN
+) -> list[tuple[str, int, int]]:
+    """Like split_chunks, but returns (chunk_text, start_char, end_char) tuples.
+
+    start_char and end_char are offsets into the original *text* string so that
+    callers can highlight exactly the right characters in a text buffer.
+    """
+    # Locate each separator span so we can derive the character offsets of parts
+    separator_spans = [(m.start(), m.end()) for m in re.finditer(r"(?<=[.!?])\s+|\n{2,}", text)]
+
+    # Build (raw_text, part_start, part_end) for each segment between separators
+    raw_parts: list[tuple[str, int, int]] = []
+    prev_end = 0
+    for sep_start, sep_end in separator_spans:
+        raw_parts.append((text[prev_end:sep_start], prev_end, sep_start))
+        prev_end = sep_end
+    raw_parts.append((text[prev_end:], prev_end, len(text)))
+
+    # Strip each part and compute the stripped offsets within the original text
+    result: list[tuple[str, int, int]] = []
+    buffer_text = ""
+    buffer_start = 0
+    buffer_end = 0
+
+    for raw, part_start, part_end in raw_parts:
+        stripped = raw.strip()
+        if not stripped:
+            continue
+
+        # Find where the stripped content begins/ends in the original text
+        leading = len(raw) - len(raw.lstrip())
+        trailing = len(raw) - len(raw.rstrip())
+        s_start = part_start + leading
+        s_end = part_end - trailing
+
+        if buffer_text:
+            buffer_text = f"{buffer_text} {stripped}"
+            buffer_end = s_end
+        else:
+            buffer_text = stripped
+            buffer_start = s_start
+            buffer_end = s_end
+
+        if len(buffer_text) >= min_len:
+            result.append((buffer_text, buffer_start, buffer_end))
+            buffer_text = ""
+
+    # Flush remainder
+    if buffer_text:
+        if result:
+            prev_text, prev_start, _ = result[-1]
+            result[-1] = (f"{prev_text} {buffer_text}", prev_start, buffer_end)
+        else:
+            result.append((buffer_text, buffer_start, buffer_end))
+
+    return result
 
 
 def _get_piper_bin() -> Optional[str]:
