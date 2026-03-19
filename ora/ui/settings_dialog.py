@@ -156,17 +156,19 @@ class SettingsDialog(Gtk.Dialog):
     # ── Voice list helpers ────────────────────────────────────────────────────
 
     def _populate_voice_combo(self) -> None:
-        """Fill the active-voice combo with installed voices filtered by language."""
+        """Fill the active-voice combo with all catalogue voices for the language."""
         self._voice_combo.remove_all()
         lang = self._cfg.get("lang", "fr")
-        installed = [v for v in self._voices.installed_voices() if v.startswith(lang)]
-        if not installed:
+        installed_set = set(self._voices.installed_voices())
+        available = [v for v in self._voices.voices_data if v.startswith(lang)]
+        if not available:
             self._voice_combo.append("none", _("settings_no_installed"))
             self._voice_combo.set_active(0)
             return
-        for v in installed:
+        for v in sorted(available):
             meta = self._voices.voices_data.get(v, {})
-            display = f"{meta.get('name', v)}  [{meta.get('quality','')}]"
+            marker = "✓ " if v in installed_set else "⬇ "
+            display = f"{marker}{meta.get('name', v)}  [{meta.get('quality','')}]"
             self._voice_combo.append(v, display)
         saved = self._cfg.get("voice", "")
         if not self._voice_combo.set_active_id(saved):
