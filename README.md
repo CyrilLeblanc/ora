@@ -10,6 +10,7 @@
 - **30+ languages** (French, English, German, Spanish, and more)
 - **Voice auto-download** — models fetched automatically on first use; no manual setup
 - **Sentence-level chunking** — text is split into chunks for low-latency start and fine-grained progress reporting
+- **Chunk highlight** — the currently playing sentence is highlighted in blue in the text area; the view auto-scrolls to follow along
 - **Per-chunk PCM cache** with LRU eviction — instant re-playback without re-synthesis
 - **Pause / Resume** — SIGSTOP/SIGCONT on the audio subprocess; no quality loss
 - **Restart** — jump back to the first chunk without re-typing
@@ -147,7 +148,7 @@ sudo dpkg -i ora_1.0.0_all.deb
 
 Items that are **not yet implemented** but planned:
 
-- **Word/sentence highlight during playback** — requires Piper to emit per-word timestamps (not yet available in the stable Piper API)
+- **Word-level highlight during playback** — requires Piper to emit per-word timestamps (not yet available in the stable Piper API)
 - **Flatpak packaging** — needs a Flatpak manifest and GNOME runtime
 - **Systray support** — would allow Ora to run in the background with a tray icon
 
