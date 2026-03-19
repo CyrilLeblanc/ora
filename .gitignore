@@ -1,2 +1,3 @@
-*.deb*.pyc
+*.deb
+*.pyc
 __pycache__/

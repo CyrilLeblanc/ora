@@ -35,6 +35,7 @@ DEFAULT_LANG          = "fr"
 DEFAULT_CACHE_MAX_MB  = 200
 CLIPBOARD_POLL_MS     = 500   # clipboard watcher interval in milliseconds
 CHUNK_MIN_LEN         = 20    # minimum characters per TTS chunk
+CHUNK_MIN_GAP         = 0.15  # minimum seconds between chunks during playback
 
 # ── Language name map (code → display name) ───────────────────────────────────
 

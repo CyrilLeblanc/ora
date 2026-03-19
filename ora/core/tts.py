@@ -4,16 +4,18 @@
 # Architecture (producer/consumer):
 #   - speak() splits text into sentence-level chunks, then launches two threads:
 #   - Producer: iterates chunks, checks cache, synthesizes with Piper if not cached,
-#               pushes (chunk_index, pcm_path) tuples into a bounded queue.
+#               pushes PCM paths into a bounded queue.
 #   - Consumer: drains the queue, plays each PCM file via aplay sequentially.
 #
 # Pause/Resume: SIGSTOP/SIGCONT sent to the current aplay subprocess.
-# Stop: terminates aplay and the current piper subprocess, drains the queue.
+# Stop: terminates aplay and the current piper subprocess, drains the queue,
+#       and sends a sentinel so any running consumer exits before a new session starts.
 # Restart: calls stop() then speak() again from the same chunk list.
 
 import os
 import queue
 import re
+import time
 import shutil
 import signal
 import subprocess
@@ -21,7 +23,7 @@ import threading
 from pathlib import Path
 from typing import Callable, Optional
 
-from ..constants import APLAY_RATE, APLAY_FORMAT, CHUNK_MIN_LEN
+from ..constants import APLAY_RATE, APLAY_FORMAT, CHUNK_MIN_LEN, CHUNK_MIN_GAP
 from .cache import CacheManager
 
 
@@ -41,7 +43,7 @@ class TTSEngine:
         self._current_piper: Optional[subprocess.Popen] = None
 
         self._stop_event = threading.Event()
-        self._queue: queue.Queue = queue.Queue(maxsize=4)
+        self._queue: queue.Queue = queue.Queue(maxsize=4)  # replaced each session
 
         self._speaking = False
         self._paused = False
@@ -81,16 +83,18 @@ class TTSEngine:
         self._notify_speaking(True)
 
         total = len(self._chunks)
+        q: queue.Queue = queue.Queue(maxsize=4)
+        self._queue = q
 
         threading.Thread(
             target=self._producer,
-            args=(list(self._chunks), model_path, speed, total),
+            args=(list(self._chunks), model_path, speed, total, q),
             daemon=True,
             name="tts-producer",
         ).start()
         threading.Thread(
             target=self._consumer,
-            args=(total,),
+            args=(total, q),
             daemon=True,
             name="tts-consumer",
         ).start()
@@ -121,12 +125,15 @@ class TTSEngine:
         self._signal_process(self._current_aplay, signal.SIGCONT)
         self._terminate_process(self._current_aplay)
         self._terminate_process(self._current_piper)
-        # Drain the queue so the producer/consumer threads can exit
+        # Drain the queue, then send a sentinel so any running consumer exits
+        # cleanly before a new session's consumer starts (prevents two consumers
+        # from competing on the same queue when chunks are cached).
         while True:
             try:
                 self._queue.get_nowait()
             except queue.Empty:
                 break
+        self._queue.put(None)
 
     def restart(self, model_path: Path, speed: float) -> None:
         """Restart playback from the first chunk using the stored chunk list."""
@@ -138,12 +145,13 @@ class TTSEngine:
     # ── Producer thread ───────────────────────────────────────────────────────
 
     def _producer(
-        self, chunks: list[str], model_path: Path, speed: float, total: int
+        self, chunks: list[str], model_path: Path, speed: float, total: int,
+        q: queue.Queue,
     ) -> None:
         piper = _get_piper_bin()
         if not piper:
             self._emit("on_error", "no_piper")
-            self._queue.put(None)
+            q.put(None)
             return
 
         for chunk in chunks:
@@ -161,21 +169,33 @@ class TTSEngine:
 
             if pcm_path and not self._stop_event.is_set():
                 # Block if the consumer is slow (bounded queue provides back-pressure)
-                self._queue.put(pcm_path)
+                q.put(pcm_path)
 
-        self._queue.put(None)  # sentinel: producer is done
+        q.put(None)  # sentinel: producer is done
 
     # ── Consumer thread ───────────────────────────────────────────────────────
 
-    def _consumer(self, total: int) -> None:
+    def _consumer(self, total: int, q: queue.Queue) -> None:
         done = 0
+        chunk_end: Optional[float] = None
         while True:
-            item = self._queue.get()
+            item = q.get()
             if item is None:
                 break  # sentinel received
 
+            # Enforce minimum gap between chunks. chunk_end marks when the
+            # previous chunk finished. q.get() already waited for synthesis,
+            # so we only sleep the time still remaining up to CHUNK_MIN_GAP.
+            if chunk_end is not None:
+                remaining = CHUNK_MIN_GAP - (time.monotonic() - chunk_end)
+                if remaining > 0:
+                    self._stop_event.wait(timeout=remaining)
+            if self._stop_event.is_set():
+                break
+
             pcm_path: Path = item
             self._play_pcm(pcm_path)
+            chunk_end = time.monotonic()
             done += 1
 
             if self.on_chunk_progress:
