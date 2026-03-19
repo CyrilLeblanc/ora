@@ -23,11 +23,14 @@ _build:
 	mkdir -p $(PKG)/usr/share/applications
 	mkdir -p $(PKG)/usr/share/doc/$(NAME)
 
-	# App
+	# Copy the entire ora package (module split)
+	cp -r ora $(PKG)/usr/lib/$(NAME)/ora
 	install -m 644 ora.py $(PKG)/usr/lib/$(NAME)/ora.py
 
-	# Launcher wrapper
-	printf '#!/bin/sh\nexec python3 /usr/lib/$(NAME)/ora.py "$$@"\n' \
+	# Launcher wrapper — uses python3 -m ora for the package entry point
+	printf '#!/bin/sh\nexec python3 -m ora "$$@"\n' \
+		> $(PKG)/usr/bin/$(NAME)_run
+	printf '#!/bin/sh\ncd /usr/lib/$(NAME) && exec python3 -m ora "$$@"\n' \
 		> $(PKG)/usr/bin/$(NAME)
 	chmod 755 $(PKG)/usr/bin/$(NAME)
 
