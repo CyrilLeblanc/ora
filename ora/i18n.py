@@ -84,6 +84,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings_title":              {"fr": "⚙ Paramètres",           "en": "⚙ Settings"},
     "settings_lang":               {"fr": "Langue des voix",         "en": "Voice language"},
     "settings_voice":              {"fr": "Voix active",             "en": "Active voice"},
+    "settings_loading_catalogue":  {"fr": "Chargement du catalogue…", "en": "Loading catalogue…"},
     "settings_installed_voices":   {"fr": "Voix installées",         "en": "Installed voices"},
     "settings_cache":              {"fr": "Cache",                   "en": "Cache"},
     "settings_cache_max":          {"fr": "Taille max",              "en": "Max size"},

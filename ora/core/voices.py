@@ -23,6 +23,7 @@ class VoiceManager:
     def __init__(self) -> None:
         self.voices_data: dict = {}      # key → metadata from voices.json
         self.offline: bool = False
+        self.catalogue_loaded: bool = False
 
     # ── Catalogue ─────────────────────────────────────────────────────────────
 
@@ -36,10 +37,12 @@ class VoiceManager:
             with urllib.request.urlopen(VOICES_JSON_URL, timeout=10) as r:
                 self.voices_data = json.loads(r.read().decode())
             self.offline = False
+            self.catalogue_loaded = True
             on_success()
         except Exception:
             self.offline = True
             self._load_offline()
+            self.catalogue_loaded = True
             on_offline()
 
     def _load_offline(self) -> None:

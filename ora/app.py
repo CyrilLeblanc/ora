@@ -51,6 +51,7 @@ class OraApp(Gtk.Window):
         self._voices = VoiceManager()
         self._tts = TTSEngine(self._cache)
         self._clipboard_watcher = None  # type: Optional[ClipboardWatcher]  # created after window shown
+        self._settings_dlg = None  # type: Optional[SettingsDialog]
 
         # Wire TTS callbacks
         self._tts.on_speaking_changed = self._on_speaking_changed
@@ -63,6 +64,17 @@ class OraApp(Gtk.Window):
         self._build_ui()
         self.show_all()
         self.dl_progress.hide()
+
+        # Populate the status-bar voice combo immediately from installed voices
+        # so the UI is usable before the catalogue HTTP fetch completes.
+        self._populate_status_voice_combo()
+        saved_voice = initial_cfg.get("voice", "")
+        if saved_voice:
+            self.status_voice_combo.set_active_id(saved_voice)
+
+        # Restore saved text immediately — must not wait for the catalogue fetch.
+        if initial_cfg.get("text"):
+            self.textview.get_buffer().set_text(initial_cfg["text"])
 
         # ── Deferred initialisation ───────────────────────────────────────────
         # Fetch the voice catalogue in the background; populate UI when done
@@ -272,10 +284,9 @@ class OraApp(Gtk.Window):
         if saved_voice:
             self.status_voice_combo.set_active_id(saved_voice)
 
-        # Restore text
-        if self._cfg.get("text"):
-            self.textview.get_buffer().set_text(self._cfg["text"])
-            # Suppress the save triggered by set_text (nothing actually changed)
+        # Refresh settings dialog voice list if it's open
+        if self._settings_dlg is not None:
+            self._settings_dlg.refresh_voice_combo()
 
         if offline:
             self._set_status(_("offline"))
@@ -388,7 +399,7 @@ class OraApp(Gtk.Window):
         self._on_play(None)
 
     def _on_open_settings(self, _btn: Gtk.Button) -> None:
-        dlg = SettingsDialog(
+        self._settings_dlg = SettingsDialog(
             parent=self,
             cache=self._cache,
             voices=self._voices,
@@ -396,8 +407,9 @@ class OraApp(Gtk.Window):
             on_lang_changed=self._on_settings_lang_changed,
             on_clipboard_toggled=self._on_settings_clipboard_toggled,
         )
-        dlg.run()
-        dlg.destroy()
+        self._settings_dlg.run()
+        self._settings_dlg.destroy()
+        self._settings_dlg = None
         # Refresh status voice combo after any changes in settings
         self._populate_status_voice_combo()
         saved_voice = cfg.load().get("voice", "")

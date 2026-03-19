@@ -88,10 +88,16 @@ class SettingsDialog(Gtk.Dialog):
         main_box.pack_start(self._lang_combo, False, False, 4)
 
         main_box.pack_start(self._make_section_label(_("settings_voice")), False, False, 4)
+        voice_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self._voice_combo = Gtk.ComboBoxText()
-        self._populate_voice_combo()
+        self._voice_combo.set_hexpand(True)
         self._voice_combo.connect("changed", self._on_voice_changed_internal)
-        main_box.pack_start(self._voice_combo, False, False, 8)
+        voice_row.pack_start(self._voice_combo, True, True, 0)
+        self._catalogue_spinner = Gtk.Spinner()
+        self._catalogue_spinner.set_tooltip_text(_("settings_loading_catalogue"))
+        voice_row.pack_start(self._catalogue_spinner, False, False, 0)
+        self._populate_voice_combo()
+        main_box.pack_start(voice_row, False, False, 8)
 
         # ── Installed voices list ─────────────────────────────────────────────
         main_box.pack_start(self._make_section_label(_("settings_installed_voices")), False, False, 4)
@@ -160,7 +166,16 @@ class SettingsDialog(Gtk.Dialog):
         self._voice_combo.remove_all()
         lang = self._cfg.get("lang", "fr")
         installed_set = set(self._voices.installed_voices())
-        available = [v for v in self._voices.voices_data if v.startswith(lang)]
+
+        if not self._voices.catalogue_loaded:
+            self._catalogue_spinner.start()
+            self._catalogue_spinner.show()
+            available = list(installed_set)
+        else:
+            self._catalogue_spinner.stop()
+            self._catalogue_spinner.hide()
+            available = [v for v in self._voices.voices_data if v.startswith(lang)]
+
         if not available:
             self._voice_combo.append("none", _("settings_no_installed"))
             self._voice_combo.set_active(0)
@@ -173,6 +188,10 @@ class SettingsDialog(Gtk.Dialog):
         saved = self._cfg.get("voice", "")
         if not self._voice_combo.set_active_id(saved):
             self._voice_combo.set_active(0)
+
+    def refresh_voice_combo(self) -> None:
+        """Called by the app when the catalogue fetch completes."""
+        self._populate_voice_combo()
 
     def _rebuild_installed_list(self) -> None:
         """Rebuild the installed-voice rows (name + size + delete button)."""
