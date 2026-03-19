@@ -56,12 +56,6 @@ cd ora
 python3 -m ora
 ```
 
-The original `ora.py` top-level shim is kept for backward compatibility:
-
-```bash
-python3 ora.py   # equivalent to python3 -m ora
-```
-
 ---
 
 ## Usage
