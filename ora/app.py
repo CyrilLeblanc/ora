@@ -304,12 +304,21 @@ class OraApp(Gtk.Window):
         self.status_voice_combo.remove_all()
 
         installed = self._voices.installed_voices()
+        installed_set = set(installed)
         for v in installed:
             meta = self._voices.voices_data.get(v, {})
             display = f"{v}  [{meta.get('quality','')}]" if meta else v
             self.status_voice_combo.append(v, display)
 
-        if not installed:
+        # Include the configured voice even if not yet installed so the
+        # selection is preserved and pressing play will trigger a download.
+        saved_voice = self._cfg.get("voice", "")
+        if saved_voice and saved_voice not in installed_set:
+            meta = self._voices.voices_data.get(saved_voice, {})
+            display = f"{saved_voice}  [{meta.get('quality','')}]" if meta else saved_voice
+            self.status_voice_combo.append(saved_voice, display)
+
+        if not installed and not saved_voice:
             self.status_voice_combo.append("none", "—")
             self.status_voice_combo.set_active(0)
 
@@ -463,6 +472,9 @@ class OraApp(Gtk.Window):
         cfg.save(self._cfg)
         # Rebuild status voice combo so it reflects voices for the new language
         self._populate_status_voice_combo()
+        saved_voice = self._cfg.get("voice", "")
+        if saved_voice:
+            self.status_voice_combo.set_active_id(saved_voice)
 
     def _on_settings_clipboard_toggled(self, enabled: bool) -> None:
         self._cfg["clipboard_enabled"] = enabled
