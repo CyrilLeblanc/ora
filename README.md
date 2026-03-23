@@ -157,7 +157,7 @@ Items that are **not yet implemented** but planned:
 
 ### Lower priority
 
-- **Word-level highlight during playback** — requires Piper to emit per-word timestamps (not yet available in the stable Piper API)
+- **Word-level highlight during playback** — The Piper Python API supports phoneme-level timestamps (`include_alignments=True`) and word boundaries can be derived from the space phoneme in `phoneme_alignments`. However, this requires a voice model trained with duration output enabled. As of March 2026, no model in the official [piper-voices catalogue](https://huggingface.co/rhasspy/piper-voices) has been trained with this option — every model returns a single ONNX output and `phoneme_alignments` is always `None` at runtime. The feature is blocked until new models are published.
 - **Flatpak packaging** — needs a Flatpak manifest and GNOME runtime
 - **Systray support** — would allow Ora to run in the background with a tray icon
 
