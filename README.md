@@ -1,6 +1,6 @@
 # 🔊 Ora
 
-**Ora** is a text-to-speech (TTS) application for Linux, built with GTK3 and [Piper](https://github.com/rhasspy/piper) — 100% offline, open-source, neural.
+**Ora** is an open-source Linux alternative to [Balabolka](http://www.cross-plus-a.com/balabolka.htm), built with GTK3 and [Piper](https://github.com/rhasspy/piper) — 100% offline, neural text-to-speech.
 
 ---
 
@@ -148,6 +148,15 @@ sudo dpkg -i ora_1.0.0_all.deb
 
 Items that are **not yet implemented** but planned:
 
+### Balabolka parity
+
+- **Open documents** — load TXT, PDF, EPUB, DOCX, ODT, HTML and other formats directly into the text area
+- **Export to audio file** — save the synthesised speech as MP3, WAV, OGG or FLAC
+- **Navigation controls** — jump to previous / next sentence or paragraph during playback
+- **Bookmarks** — save and restore named positions within a text
+
+### Lower priority
+
 - **Word-level highlight during playback** — requires Piper to emit per-word timestamps (not yet available in the stable Piper API)
 - **Flatpak packaging** — needs a Flatpak manifest and GNOME runtime
 - **Systray support** — would allow Ora to run in the background with a tray icon
@@ -156,4 +165,4 @@ Items that are **not yet implemented** but planned:
 
 ## License
 
-MIT
+[GPL-3.0](LICENSE)
