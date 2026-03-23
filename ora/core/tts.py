@@ -209,17 +209,21 @@ class TTSEngine:
                 from gi.repository import GLib
                 GLib.idle_add(self.on_chunk_progress, done, total)
 
-        # Clear the highlight and mark as no longer speaking once consumer finishes
-        if self.on_chunk_highlight:
-            from gi.repository import GLib
-            GLib.idle_add(self.on_chunk_highlight, -1, -1)
+        # All teardown runs on the main thread so _speaking is only ever written
+        # from one thread (main), eliminating the read/write race with pause()/resume().
+        fire_done = not self._stop_event.is_set()
 
-        self._speaking = False
-        self._notify_speaking(False)
+        def _finish_on_main() -> None:
+            if self.on_chunk_highlight:
+                self.on_chunk_highlight(-1, -1)
+            self._speaking = False
+            if self.on_speaking_changed:
+                self.on_speaking_changed(False)
+            if fire_done and self.on_done:
+                self.on_done()
 
-        if not self._stop_event.is_set() and self.on_done:
-            from gi.repository import GLib
-            GLib.idle_add(self.on_done)
+        from gi.repository import GLib
+        GLib.idle_add(_finish_on_main)
 
     # ── Synthesis & playback helpers ──────────────────────────────────────────
 
@@ -260,7 +264,12 @@ class TTSEngine:
             str(pcm_path),
         ]
         try:
-            proc = subprocess.Popen(cmd, stderr=subprocess.DEVNULL)
+            proc = subprocess.Popen(
+                cmd,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
             self._current_aplay = proc
             proc.wait()  # SIGSTOP pauses this wait; SIGCONT resumes it
             self._current_aplay = None

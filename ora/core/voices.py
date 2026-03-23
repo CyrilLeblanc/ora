@@ -140,6 +140,8 @@ class VoiceManager:
         if not onnx_url:
             # Fall back to conventional path structure when files dict is empty
             parts = voice_key.split("-")
+            if len(parts) < 3:
+                raise ValueError(f"Cannot resolve URLs for malformed voice key: {voice_key!r}")
             lang_region, name, quality = parts[0], parts[1], parts[2]
             lang_code = lang_region.split("_")[0]
             base = f"{lang_code}/{lang_region}/{name}/{quality}/{voice_key}"

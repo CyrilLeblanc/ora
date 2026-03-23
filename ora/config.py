@@ -30,9 +30,10 @@ def load() -> dict:
 
 
 def save(cfg: dict) -> None:
-    """Persist config dict to disk. Silently ignores write errors."""
+    """Persist config dict to disk."""
     try:
         CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
         CONFIG_FILE.write_text(json.dumps(cfg, indent=2))
-    except Exception:
-        pass
+    except Exception as e:
+        import sys
+        print(f"[ora] warning: could not save config: {e}", file=sys.stderr)
